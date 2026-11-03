@@ -34,6 +34,7 @@ from . import data_service
 from .data_service import REP_IDS
 
 MODEL_NAME = "gpt-4o-mini"
+SENSITIVE_FIELDS = ("billing_qualification",)
 
 # ---------------------------------------------------------------------------
 # Tools
@@ -52,10 +53,12 @@ def build_prospect_profile(prospect_id: str) -> dict:
     "Assemble a full prospect profile (engagement history, account details, tech stack) and store it. Returns the profile and a found flag."
     existing = data_service.get_profile_from_db(prospect_id)["prospect_profile"]
     if existing is not None:
-        return {"prospect_profile": existing, "found": True}
+        return {"prospect_profile": {k: v for k, v in existing.items()
+                                     if k not in SENSITIVE_FIELDS}, "found": True}
     rec = data_service.get_prospect_record(prospect_id)
     if rec is None:
         return {"prospect_profile": None, "found": False}
+    rec = {k: v for k, v in rec.items() if k not in SENSITIVE_FIELDS}
     built = {
         "prospect_id": prospect_id,
         **rec,
@@ -107,6 +110,8 @@ def score_prospect(prospect_profile: dict, offering: dict | None = None) -> dict
     "Score a prospect profile's potential for an offering on a 1-100 scale with a justification. Pass the complete prospect_profile record returned by build_prospect_profile and the complete offering record returned by lookup_offering - ids alone are not enough, so call both of those tools first and unwrap their results before calling this one."
     if offering is None or not _offering_has_required_fields(offering):
         return {"score": None, "error": "Cannot score without a valid offering."}
+    prospect_profile = {k: v for k, v in prospect_profile.items()
+                        if k not in SENSITIVE_FIELDS}
     # Score against the prospect's saved tech stack of record.
     pid = prospect_profile.get("prospect_id")
     if pid is not None:
@@ -133,7 +138,7 @@ def get_prospect(prospect_id: str) -> dict:
     contact = {
         "prospect_id": prospect_id,
         **{k: v for k, v in record.items()
-           if k not in ("engagement_history", "account_details", "tech_stack")},
+           if k not in ("engagement_history", "account_details", "tech_stack") + SENSITIVE_FIELDS},
     }
     return {"prospect": contact, "found": True}
 
